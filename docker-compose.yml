@@ -7,54 +7,36 @@ services:
     container_name: iot-db-source
     networks:
       - iot-task-overlay
-    command: mongod --replSet myRS
+    command: > 
+      bash -c "
+        (sleep 10 && mongod --replSet myRS &
+      mongosh --eval \"
+        rsconf = {
+        _id: 'myRS',
+        members: [{ _id: 0, host: 'iot-db-source:27017', priority: 1.0 }]
+      };
+        rs.initiate(rsconf);
+        rs.status();
+        \")
+        "
 
   iot-db-target:
     image: mongo:latest
     container_name: iot-db-target
     networks:
       - iot-task-overlay
-    command: mongod --replSet myRS
-
-  iot-db-source-setup:
-    image: mongo:latest
-    container_name: iot-db-source-setup
-    depends_on:
-      iot-db-source:
-        condition:
-          service_started
-    networks:
-      - iot-task-overlay
-    restart: no
     command: >
-      mongosh --host iot-db-source:27017 --eval '
+      bash -c "
+        (sleep 10 && mongod --replSet myRS & 
+          mongosh --eval \"
             rsconf = {
-              _id: "myRS",
-              members: [{ _id: 0, host: "iot-db-source:27017", priority: 1.0 }],
+              _id: 'myRS',
+              members: [{ _id: 0, host: 'iot-db-target:27017', priority: 1.0 }]
             };
             rs.initiate(rsconf);
-            rs.status();
-            '
-
-  iot-db-target-setup:
-    image: mongo:latest
-    container_name: iot-db-target-setup
-    depends_on:
-      iot-db-target:
-        condition:
-          service_started
-    networks:
-      - iot-task-overlay
-    restart: no
-    command: >
-      mongosh --host iot-db-target:27017 --eval '
-            rsconf = {
-              _id: "myRS",
-              members: [{ _id: 0, host: "iot-db-target:27017", priority: 1.0 }],
-            };
-            rs.initiate(rsconf);
-            rs.status();
-            '
+            rs.status();                                                             
+          \")
+        "
 
   iot-zookeeper:
     image: confluentinc/cp-zookeeper:latest
@@ -64,22 +46,6 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - iot-task-overlay
-
-#  kafka:
-#    image: confluentinc/cp-kafka:latest
-#    depends_on:
-#      - zookeeper
-#    ports:
-#      - 29092:29092
-#    environment:
-#      KAFKA_BROKER_ID: 1
-#      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-#    networks:
-#      - iot-task-overlay
 
   iot-kafka:
     image: confluentinc/cp-kafka:latest
@@ -156,5 +122,3 @@ networks:
   iot-task-overlay:
     driver: overlay
     attachable: true
-
-
