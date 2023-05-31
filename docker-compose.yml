@@ -1,0 +1,145 @@
+version: "3.7"
+name: "zloyegor-iot-task"
+services:
+
+  iot-db-source:
+    image: mongo:latest
+    container_name: iot-db-source
+    networks:
+      - iot-task-overlay
+    command: mongod --replSet myRS
+
+  iot-db-target:
+    image: mongo:latest
+    container_name: iot-db-target
+    networks:
+      - iot-task-overlay
+    command: mongod --replSet myRS
+
+  iot-db-source-setup:
+    image: mongo:latest
+    container_name: iot-db-source-setup
+    depends_on:
+      iot-db-source:
+        condition:
+          service_started
+    networks:
+      - iot-task-overlay
+    restart: no
+    command: >
+      mongosh --host iot-db-source:27017 --eval '
+            rsconf = {
+              _id: "myRS",
+              members: [{ _id: 0, host: "iot-db-source:27017", priority: 1.0 }],
+            };
+            rs.initiate(rsconf);
+            rs.status();
+            '
+
+  iot-db-target-setup:
+    image: mongo:latest
+    container_name: iot-db-target-setup
+    depends_on:
+      iot-db-target:
+        condition:
+          service_started
+    networks:
+      - iot-task-overlay
+    restart: no
+    command: >
+      mongosh --host iot-db-target:27017 --eval '
+            rsconf = {
+              _id: "myRS",
+              members: [{ _id: 0, host: "iot-db-target:27017", priority: 1.0 }],
+            };
+            rs.initiate(rsconf);
+            rs.status();
+            '
+
+  iot-zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: iot-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 32181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - iot-task-overlay
+
+#  kafka:
+#    image: confluentinc/cp-kafka:latest
+#    depends_on:
+#      - zookeeper
+#    ports:
+#      - 29092:29092
+#    environment:
+#      KAFKA_BROKER_ID: 1
+#      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+#    networks:
+#      - iot-task-overlay
+
+  iot-kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: iot-kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - iot-zookeeper
+    networks:
+      - iot-task-overlay
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: iot-zookeeper:32181
+      KAFKA_LISTENERS: INTERNAL://iot-kafka:29092,EXTERNAL://iot-kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://iot-kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # using single node cluster
+#      CONFLUENT_SUPPORT_CUSTOMER_ID: "anonymous"
+
+  iot-kafka-connect:
+    container_name: iot-kafka-connect
+    build:
+      context: .
+      dockerfile: connect-mongodb.Dockerfile
+    depends_on:
+      - iot-kafka
+#      - schema-registry
+    networks:
+      - iot-task-overlay
+    environment:
+      CONNECT_GROUP_ID: 1
+      CONNECT_CONFIG_STORAGE_TOPIC: "connect-mongodb-config"
+      CONNECT_OFFSET_STORAGE_TOPIC: "connect-mongodb-offset"
+      CONNECT_STATUS_STORAGE_TOPIC: "connect-mongodb-status"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+      CONNECT_BOOTSTRAP_SERVERS: "iot-kafka:29092"
+      CONNECT_ZOOKEEPER_CONNECT: "iot-zookeeper:32181"
+      CONNECT_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CONNECT_REST_ADVERTISED_HOST_NAME: iot-kafka-connect
+      CONNECT_REST_PORT: 8083
+
+  basic-client:
+    image: curlimages/curl:latest
+    container_name: iot-basic-client
+    restart: no
+    networks:
+      - iot-task-overlay
+    command: sleep infinity
+    volumes:
+      - ${PWD}/connector:/home/curl_user/
+
+networks:
+  iot-task-overlay:
+    driver: overlay
+    attachable: true
+
+
