@@ -112,22 +112,22 @@ services:
       - iot-task-overlay
     environment:
       CONNECT_GROUP_ID: 1
-      CONNECT_CONFIG_STORAGE_TOPIC: "connect-mongodb-config"
-      CONNECT_OFFSET_STORAGE_TOPIC: "connect-mongodb-offset"
-      CONNECT_STATUS_STORAGE_TOPIC: "connect-mongodb-status"
+      CONNECT_CONFIG_STORAGE_TOPIC: connect-mongodb-config
+      CONNECT_OFFSET_STORAGE_TOPIC: connect-mongodb-offset
+      CONNECT_STATUS_STORAGE_TOPIC: connect-mongodb-status
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
-      CONNECT_BOOTSTRAP_SERVERS: "iot-kafka:29092"
-      CONNECT_ZOOKEEPER_CONNECT: "iot-zookeeper:32181"
-      CONNECT_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      CONNECT_BOOTSTRAP_SERVERS: iot-kafka:29092
+      CONNECT_ZOOKEEPER_CONNECT: iot-zookeeper:32181
+      CONNECT_AUTO_CREATE_TOPICS_ENABLE: true
       CONNECT_REST_ADVERTISED_HOST_NAME: iot-kafka-connect
       CONNECT_REST_PORT: 8083
 
-  basic-client:
+  iot-basic-client:
     image: curlimages/curl:latest
     container_name: iot-basic-client
     restart: no
@@ -137,6 +137,21 @@ services:
     volumes:
       - ${PWD}/connector:/home/curl_user/
 
+  iot-kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.0
+    container_name: iot-kafka-ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - iot-kafka
+#      - schema-registry
+      - iot-kafka-connect
+    networks:
+      - iot-task-overlay
+    environment:
+      DYNAMIC_CONFIG_ENABLED: true
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: iot-kafka:29092
 networks:
   iot-task-overlay:
     driver: overlay
