@@ -21,7 +21,7 @@ docker compose up
 ```shell
 docker compose exec -it iot-connector-setter sh
 ```
-Внутри оболочки выполним последовательность команд для подключения коннекторов сначала к `iot-db-source` и `iot-db-target`:
+Внутри оболочки выполним последовательность команд для подключения коннекторов к `iot-db-source` и `iot-db-target`:
 ```shell
 cd ~
 ./set-connectors.sh
