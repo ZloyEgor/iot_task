@@ -7,17 +7,16 @@ services:
     container_name: iot-db-source
     networks:
       - iot-task-overlay
-    command: > 
+    command: >
       bash -c "
-        (sleep 10 && mongod --replSet myRS &
-      mongosh --eval \"
-        rsconf = {
-        _id: 'myRS',
-        members: [{ _id: 0, host: 'iot-db-source:27017', priority: 1.0 }]
-      };
-        rs.initiate(rsconf);
-        rs.status();
-        \")
+        (sleep 10 && mongosh --eval \"
+            rsconf = {
+              _id: 'myRS',
+              members: [{ _id: 0, host: 'iot-db-source:27017', priority: 1.0 }]
+            };
+            rs.initiate(rsconf);
+            rs.status();                                                             
+          \") & mongod --replSet myRS --bind_ip_all
         "
 
   iot-db-target:
@@ -27,15 +26,14 @@ services:
       - iot-task-overlay
     command: >
       bash -c "
-        (sleep 10 && mongod --replSet myRS & 
-          mongosh --eval \"
+        (sleep 10 && mongosh --eval \"
             rsconf = {
               _id: 'myRS',
               members: [{ _id: 0, host: 'iot-db-target:27017', priority: 1.0 }]
             };
             rs.initiate(rsconf);
             rs.status();                                                             
-          \")
+          \") & mongod --replSet myRS --bind_ip_all
         "
 
   iot-zookeeper:
@@ -63,8 +61,7 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_BROKER_ID: 1
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # using single node cluster
-#      CONFLUENT_SUPPORT_CUSTOMER_ID: "anonymous"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   iot-kafka-connect:
     container_name: iot-kafka-connect
@@ -73,7 +70,6 @@ services:
       dockerfile: connect-mongodb.Dockerfile
     depends_on:
       - iot-kafka
-#      - schema-registry
     networks:
       - iot-task-overlay
     environment:
@@ -89,13 +85,13 @@ services:
       CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
       CONNECT_BOOTSTRAP_SERVERS: iot-kafka:29092
       CONNECT_ZOOKEEPER_CONNECT: iot-zookeeper:32181
-      CONNECT_AUTO_CREATE_TOPICS_ENABLE: true
+      CONNECT_AUTO_CREATE_TOPICS_ENABLE: "true"
       CONNECT_REST_ADVERTISED_HOST_NAME: iot-kafka-connect
       CONNECT_REST_PORT: 8083
 
-  iot-basic-client:
+  iot-connector-setter:
     image: curlimages/curl:latest
-    container_name: iot-basic-client
+    container_name: iot-connector-setter
     restart: no
     networks:
       - iot-task-overlay
@@ -110,7 +106,6 @@ services:
       - "8080:8080"
     depends_on:
       - iot-kafka
-#      - schema-registry
       - iot-kafka-connect
     networks:
       - iot-task-overlay
@@ -118,6 +113,7 @@ services:
       DYNAMIC_CONFIG_ENABLED: true
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: iot-kafka:29092
+
 networks:
   iot-task-overlay:
     driver: overlay
